@@ -45,6 +45,78 @@ def resize_average_two_horizontal(image, new_width, new_height):
     return Image.fromarray(result)
 
 
+def resize_bilinear(image, new_width, new_height):
+    original = np.array(image)
+    height_in, width_in = original.shape[:2]
+    result = np.zeros((new_height, new_width, 3), dtype=np.uint8)
+
+    scale_x = width_in / new_width
+    scale_y = height_in / new_height
+
+    for y_new in range(new_height):
+        for x_new in range(new_width):
+            x_src = x_new * scale_x
+            y_src = y_new * scale_y
+
+            x0 = int(np.floor(x_src))
+            x1 = min(x0 + 1, width_in - 1)
+            y0 = int(np.floor(y_src))
+            y1 = min(y0 + 1, height_in - 1)
+
+            dx = x_src - x0
+            dy = y_src - y0
+
+            p00 = original[y0, x0].astype(np.float32)
+            p01 = original[y0, x1].astype(np.float32)
+            p10 = original[y1, x0].astype(np.float32)
+            p11 = original[y1, x1].astype(np.float32)
+
+            top = p00 * (1 - dx) + p01 * dx
+            bottom = p10 * (1 - dx) + p11 * dx
+            pixel = top * (1 - dy) + bottom * dy
+
+            result[y_new, x_new] = np.clip(pixel, 0, 255).astype(np.uint8)
+
+    return Image.fromarray(result)
+
+
+def resize_rgb_min_max_avg(image, new_width, new_height):
+    original = np.array(image)
+    height_in, width_in = original.shape[:2]
+    result = np.zeros((new_height, new_width, 3), dtype=np.uint8)
+
+    scale_x = width_in / new_width
+    scale_y = height_in / new_height
+
+    for y_new in range(new_height):
+        for x_new in range(new_width):
+            x_src = x_new * scale_x
+            y_src = y_new * scale_y
+
+            x0 = int(np.floor(x_src))
+            x1 = min(x0 + 1, width_in - 1)
+            y0 = int(np.floor(y_src))
+            y1 = min(y0 + 1, height_in - 1)
+
+            p00 = original[y0, x0]
+            p01 = original[y0, x1]
+            p10 = original[y1, x0]
+            p11 = original[y1, x1]
+
+            pixel_block = np.array([p00, p01, p10, p11], dtype=np.uint16)
+
+            avg_rgb = []
+            for channel in range(3):
+                values = pixel_block[:, channel]
+                avg_val = (np.min(values) + np.max(values)) // 2
+                avg_rgb.append(avg_val)
+
+            result[y_new, x_new] = avg_rgb
+
+    return Image.fromarray(result.astype(np.uint8))
+
+
+
 def main():
     if len(sys.argv) != 6:
         print("USAGE: python3 main.py <PATH_IN> <WIDTH> <HEIGHT> <ALG> <PATH_OUT> ")
@@ -62,6 +134,10 @@ def main():
         resized = resize_nearest_neighbor(img, width_out, height_out)
     elif algorithm == "b":
         resized = resize_average_two_horizontal(img, width_out, height_out)
+    elif algorithm == "c":
+        resized = resize_bilinear(img, width_out, height_out)
+    elif algorithm == "d":
+        resized = resize_rgb_min_max_avg(img, width_out, height_out)
     else:
         sys.exit(2)
 
