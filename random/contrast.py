@@ -3,7 +3,8 @@ import cv2
 import sys
 import numpy as np
 
-from hist import plot_histogram
+from hist import histogram_equalization, plot_histogram
+from threshold import iterative_three_class_thresholding
 
 
 def calculate_global_contrast(image_path):
@@ -57,7 +58,7 @@ def calculate_local_contrast(image_path):
         return None
 
 
-def contrast_lut(image_path, output_image_path):
+def contrast_lut(image_path, output_image_path, lut_rgb):
     try:
         if not os.path.exists(image_path):
             print(f"err: file not found: {image_path}")
@@ -69,60 +70,55 @@ def contrast_lut(image_path, output_image_path):
             print(f"err: image not found or invalid format: {image_path}")
             return
 
-        lut_b = np.zeros(256, dtype=np.uint8)
-        lut_g = np.zeros(256, dtype=np.uint8)
-        lut_r = np.zeros(256, dtype=np.uint8)
-
-        for i in range(256):
-            if 0 <= i <= 31:
-                lut_b[i] = round(128 + (127 / 31) * i)
-            elif 31 < i <= 95:
-                lut_b[i] = 255
-            elif 95 < i <= 159:
-                lut_b[i] = round(255 - (255 / 64) * (i - 95))
-            else:
-                lut_b[i] = 0
-
-            if 0 <= i <= 31:
-                lut_r[i] = 0
-            elif 31 < i <= 95:
-                lut_r[i] = round((255 / 64) * (i - 31))
-            elif 95 < i <= 159:
-                lut_r[i] = 255
-            elif 159 < i <= 223:
-                lut_r[i] = round(255 - (255 / 64) * (i - 159))
-            else:
-                lut_r[i] = 0
-
-            if 0 <= i <= 95:
-                lut_g[i] = 0
-            elif 95 < i <= 159:
-                lut_g[i] = round((255 / 64) * (i - 95))
-            elif 159 < i <= 223:
-                lut_g[i] = 255
-            else:
-                lut_g[i] = round(255 - (127 / 32) * (i - 223))
-
         output_img_color = np.zeros(
             (img_gray.shape[0], img_gray.shape[1], 3), dtype=np.uint8)
 
-        output_img_color[:, :, 0] = lut_b[img_gray]
-        output_img_color[:, :, 1] = lut_g[img_gray]
-        output_img_color[:, :, 2] = lut_r[img_gray]
+        output_img_color[:, :, 0] = lut_rgb[2][img_gray]
+        output_img_color[:, :, 1] = lut_rgb[1][img_gray]
+        output_img_color[:, :, 2] = lut_rgb[0][img_gray]
 
         cv2.imwrite(output_image_path, output_img_color)
         print(f"image saved as: {output_image_path}")
-
-        # output_dir = os.path.dirname(output_image_path)
-        # output_filename_base = os.path.splitext(
-        #     os.path.basename(output_image_path))[0]
-        # output_hist_plot_path = os.path.join(
-        #     output_dir, f"{output_filename_base}_hist_rgb.png")
-        # plot_histogram(
-        #     output_img_color, 'Histogramy Kanałów RGB Obrazu po Transformacji LUT', output_hist_plot_path)
-
     except Exception as e:
         print(f"err: {e}")
+
+
+def gen_lut():
+    lut_b = np.zeros(256, dtype=np.uint8)
+    lut_g = np.zeros(256, dtype=np.uint8)
+    lut_r = np.zeros(256, dtype=np.uint8)
+
+    for i in range(256):
+        if 0 <= i <= 31:
+            lut_b[i] = round(128 + (127 / 31) * i)
+        elif 31 < i <= 95:
+            lut_b[i] = 255
+        elif 95 < i <= 159:
+            lut_b[i] = round(255 - (255 / 64) * (i - 95))
+        else:
+            lut_b[i] = 0
+
+        if 0 <= i <= 31:
+            lut_r[i] = 0
+        elif 31 < i <= 95:
+            lut_r[i] = round((255 / 64) * (i - 31))
+        elif 95 < i <= 159:
+            lut_r[i] = 255
+        elif 159 < i <= 223:
+            lut_r[i] = round(255 - (255 / 64) * (i - 159))
+        else:
+            lut_r[i] = 0
+
+        if 0 <= i <= 95:
+            lut_g[i] = 0
+        elif 95 < i <= 159:
+            lut_g[i] = round((255 / 64) * (i - 95))
+        elif 159 < i <= 223:
+            lut_g[i] = 255
+        else:
+            lut_g[i] = round(255 - (127 / 32) * (i - 223))
+
+    return (lut_r, lut_g, lut_b)
 
 
 def main():
@@ -141,7 +137,16 @@ def main():
         result = calculate_local_contrast(path_in)
         print(f"Local contrast: {result}")
     elif var == "lut":
-        contrast_lut(path_in, path_out)
+        lut_rgb = gen_lut()
+        contrast_lut(path_in, path_out, lut_rgb)
+    elif var == "ct":
+        histogram_equalization(path_in, "output/CalunTurynski_equalized.png")
+        iterative_three_class_thresholding(
+            "output/CalunTurynski_equalized.png", path_out)
+
+        img = cv2.imread(path_out, cv2.IMREAD_GRAYSCALE)
+        plot_histogram(img, "Histogram i skumulowany histogram",
+                       "output/CalunTurynski_equalized_three_class_hist.png")
     else:
         sys.exit(2)
 

@@ -31,47 +31,6 @@ def plot_histogram(image_data, title, output_plot_path):
     plt.close()
 
 
-def calculate_and_plot_original_histograms(image_path, output_plot_path=None):
-    try:
-        img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-
-        if img is None:
-            print(
-                f"err: image not found: {image_path}")
-            return
-
-        hist = cv2.calcHist([img], [0], None, [256], [0, 256])
-        hist = hist.flatten()
-
-        cdf = hist.cumsum()
-        cdf_normalized = cdf * hist.max() / cdf.max() if cdf.max() > 0 else cdf
-
-        plt.figure(figsize=(10, 6))
-        plt.title('Histogram i Skumulowany Histogram')
-        plt.xlabel('Poziom jasności piksela')
-        plt.ylabel('Liczba pikseli / Skumulowana liczba pikseli (znormalizowana)')
-
-        plt.plot(hist, color='blue', label='Histogram')
-        plt.fill_between(range(256), hist, color='lightblue', alpha=0.5)
-
-        plt.plot(cdf_normalized, color='red',
-                 label='Skumulowany Histogram (znormalizowany)')
-
-        plt.legend()
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.xlim([0, 255])
-        plt.tight_layout()
-
-        if output_plot_path:
-            plt.savefig(output_plot_path)
-            print(f"plot saved as: {output_plot_path}")
-        else:
-            plt.show()
-
-    except Exception as e:
-        print(f"err: {e}")
-
-
 def histogram_equalization(image_path, output_image_path):
     try:
         if not os.path.exists(image_path):
@@ -192,7 +151,12 @@ def main():
     path_out = sys.argv[3]
 
     if var == "a":
-        calculate_and_plot_original_histograms(path_in, path_out)
+        img = cv2.imread(path_in, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            print(f"err: image not found: {path_in}")
+            return
+
+        plot_histogram(img, 'Histogram i Skumulowany Histogram', path_out)
     elif var == "b":
         histogram_equalization(path_in, path_out)
     elif var == "c":
