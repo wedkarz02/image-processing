@@ -131,6 +131,158 @@ def van_cittert_deconvolution(blurred_image, kernel, iterations):
     return deconvolved_image, difference_images
 
 
+def k_trimmed_mean_filter(image_path, k=2, window_size=3):
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
+    if image is None:
+        raise FileNotFoundError(
+            f"Could not open or find the image at {image_path}")
+
+    if window_size % 2 == 0:
+        return None
+
+    rows, cols = image.shape
+    filtered_image = np.zeros_like(image, dtype=np.uint8)
+
+    pad = window_size // 2
+
+    for r in range(rows):
+        for c in range(cols):
+            r_start = max(0, r - pad)
+            r_end = min(rows, r + pad + 1)
+            c_start = max(0, c - pad)
+            c_end = min(cols, c + pad + 1)
+
+            window = image[r_start:r_end, c_start:c_end].flatten()
+            window_sorted = np.sort(window)
+
+            if len(window_sorted) > 2 * k:
+                trimmed_values = window_sorted[k:len(window_sorted) - k]
+            else:
+                if len(window_sorted) > 0:
+                    trimmed_values = np.array([np.median(window_sorted)])
+                else:
+                    trimmed_values = np.array([])
+
+            if len(trimmed_values) > 0:
+                filtered_image[r, c] = np.mean(trimmed_values)
+            else:
+                filtered_image[r, c] = image[r, c]
+
+    return filtered_image
+
+
+def k_nearest_neighbor_filter(image_path, k=6, window_size=3):
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
+    if image is None:
+        raise FileNotFoundError(
+            f"Could not open or find the image at {image_path}")
+
+    if window_size % 2 == 0:
+        return None
+
+    rows, cols = image.shape
+    filtered_image = np.zeros_like(image, dtype=np.uint8)
+
+    pad = window_size // 2
+
+    for r in range(rows):
+        for c in range(cols):
+            center_pixel_value = image[r, c]
+
+            r_start = max(0, r - pad)
+            r_end = min(rows, r + pad + 1)
+            c_start = max(0, c - pad)
+            c_end = min(cols, c + pad + 1)
+
+            window_values = []
+            for wr in range(r_start, r_end):
+                for wc in range(c_start, c_end):
+                    window_values.append(image[wr, wc])
+
+            distances_and_values = []
+            for val in window_values:
+                diff = int(val) - int(center_pixel_value)
+                distances_and_values.append((abs(diff), val))
+
+            distances_and_values.sort(key=lambda x: x[0])
+
+            k_nearest_values = []
+            for i in range(min(k, len(distances_and_values))):
+                k_nearest_values.append(distances_and_values[i][1])
+
+            if len(k_nearest_values) > 0:
+                filtered_image[r, c] = np.mean(k_nearest_values)
+            else:
+                filtered_image[r, c] = center_pixel_value
+
+    return filtered_image
+
+
+def symmetric_nearest_neighbor_filter(image_path, window_size=3):
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
+    if image is None:
+        raise FileNotFoundError(
+            f"Could not open or find the image at {image_path}")
+
+    if window_size % 2 == 0:
+        return None
+
+    rows, cols = image.shape
+    filtered_image = np.zeros_like(image, dtype=np.uint8)
+
+    pad = window_size // 2
+
+    for r in range(rows):
+        for c in range(cols):
+            center_pixel_value = image[r, c]
+            symm_values = []
+
+            for i in range(1, pad + 1):
+                if c - i >= 0 and c + i < cols:
+                    left_val = image[r, c - i]
+                    right_val = image[r, c + i]
+                    if abs(int(left_val) - int(center_pixel_value)) < abs(int(right_val) - int(center_pixel_value)):
+                        symm_values.append(left_val)
+                    else:
+                        symm_values.append(right_val)
+
+                if r - i >= 0 and r + i < rows:
+                    top_val = image[r - i, c]
+                    bottom_val = image[r + i, c]
+                    if abs(int(top_val) - int(center_pixel_value)) < abs(int(bottom_val) - int(center_pixel_value)):
+                        symm_values.append(top_val)
+                    else:
+                        symm_values.append(bottom_val)
+
+                if r - i >= 0 and c - i >= 0 and r + i < rows and c + i < cols:
+                    val1 = image[r - i, c - i]
+                    val2 = image[r + i, c + i]
+                    if abs(int(val1) - int(center_pixel_value)) < abs(int(val2) - int(center_pixel_value)):
+                        symm_values.append(val1)
+                    else:
+                        symm_values.append(val2)
+
+                if r - i >= 0 and c + i < cols and r + i < rows and c - i >= 0:
+                    val1 = image[r - i, c + i]
+                    val2 = image[r + i, c - i]
+                    if abs(int(val1) - int(center_pixel_value)) < abs(int(val2) - int(center_pixel_value)):
+                        symm_values.append(val1)
+                    else:
+                        symm_values.append(val2)
+
+            symm_values.append(center_pixel_value)
+
+            if len(symm_values) > 0:
+                filtered_image[r, c] = np.mean(symm_values)
+            else:
+                filtered_image[r, c] = center_pixel_value
+
+    return filtered_image
+
+
 def main():
     if len(sys.argv) != 4:
         print("USAGE: python3 main.py <PATH_IN> <VARIANT> <PATH_OUT>")
@@ -204,6 +356,18 @@ def main():
 
         except Exception as e:
             print(f"err: {e}")
+    elif var == "ktm":
+        filtered_image = k_trimmed_mean_filter(path_in)
+        cv2.imwrite(path_out, filtered_image)
+        print(f"img saved as: {path_out}")
+    elif var == "knn":
+        filtered_image = k_nearest_neighbor_filter(path_in)
+        cv2.imwrite(path_out, filtered_image)
+        print(f"img saved as: {path_out}")
+    elif var == "snn":
+        filtered_image = symmetric_nearest_neighbor_filter(path_in)
+        cv2.imwrite(path_out, filtered_image)
+        print(f"img saved as: {path_out}")
     else:
         sys.exit(2)
 
